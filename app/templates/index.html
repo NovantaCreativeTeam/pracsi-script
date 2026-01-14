@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <title>ELAN → CSV converter | Language Tips</title>
+
+    <!-- Bootstrap 5 -->
+    <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+    >
+
+    <style>
+        body {
+            min-height: 100vh;
+            background-color: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .logo {
+            max-width: 200px;
+            margin-bottom: 40px;
+        }
+
+        .upload-form {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 650px;
+        }
+    </style>
+</head>
+<body>
+
+
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12 text-center">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo img-fluid">
+        </div>
+        <div class="col-lg-8">
+
+            <h5>Regole per la corretta elaborazione</h5>
+
+            <p>Perché il CSV venga generato correttamente, il file <code>.eaf</code> deve rispettare alcune regole:</p>
+
+            <h6>1. Tiers dei partecipanti</h6>
+            <p>I tier dei partecipanti principali devono avere <code>LINGUISTIC_TYPE_REF="Parlante"</code>, cioè il tier type assegnato deve essere <code>Parlante</code>.</p>
+            <p>Ogni partecipante ha uno o più tier figli con <code>Participant</code> uguale al partecipante padre e
+                <code>LINGUISTIC_TYPE_REF</code> tra:</p>
+            <ul>
+                <li>Non verbal action</li>
+                <li>MoveLev1</li>
+                <li>MoveLev2</li>
+                <li>MoveLev3</li>
+            </ul>
+
+            <h6>2. Inclusione temporale delle mosse dialogiche</h6>
+            <p>Per riempire le colonne <strong>Non Verbal Action</strong>, <strong>Move Level 1-3</strong>:</p>
+            <ul>
+                <li>Un’annotazione figlia viene considerata associata alla riga principale se:</li>
+                <ul>
+                    <li>Inizia nello stesso istante dell’annotazione principale <strong>OR</strong></li>
+                    <li>Finisce nello stesso istante dell’annotazione principale</li>
+                </ul>
+                <li>Se ci sono più annotazioni dello stesso tipo, i valori vengono concatenati con una virgola nella
+                    stessa cella.
+                </li>
+            </ul>
+
+            <h6>3. Tiers trasversali</h6>
+            <p>I seguenti tiers coprono tutta la trascrizione e non appartengono a un partecipante specifico:</p>
+            <ul>
+                <li>Task</li>
+                <li>Micro task</li>
+                <li>Sequence</li>
+                <li>Transaction</li>
+                <li>Interactional Segment</li>
+                <li>Note</li>
+            </ul>
+            <p><strong>Regola:</strong> se un’annotazione principale cade temporalmente all’interno di uno di questi
+                tiers, il relativo valore viene riportato nella colonna corrispondente; altrimenti la cella resta vuota.
+            </p>
+        </div>
+        <div class="col-lg-4">
+            <!-- Form -->
+            <form class="upload-form" method="post" action="/upload" enctype="multipart/form-data">
+                <h4 class="mb-4">Converti file ELAN (.eaf) in CSV</h4>
+                <p>Questo tool permette di convertire un file ELAN (.eaf) in un CSV con le annotazioni organizzate e pronte per l’analisi.</p>
+
+                <div class="mb-3 mt-4">
+                    <input type="file" name="file" accept=".eaf" class="form-control" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Converti e scarica CSV</button>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+
+</body>
+</html>
