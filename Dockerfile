@@ -7,7 +7,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Copia i file del progetto
-COPY ./app /app
+COPY . /app
 
 # Aggiorna pip, setuptools, wheel
 RUN pip install --upgrade pip setuptools wheel
