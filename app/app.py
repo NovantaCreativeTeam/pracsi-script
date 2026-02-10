@@ -26,7 +26,7 @@ def parse_eaf_to_csv(eaf_file, csv_file):
     timeslots = {ts.attrib["TIME_SLOT_ID"]: int(ts.attrib["TIME_VALUE"]) for ts in root.find("TIME_ORDER")}
 
     # Tier trasversali
-    TRANSVERSAL_TIERS = ["Task", "Interactional segment", "Micro task", "Sequence", "Transaction", "Note"]
+    TRANSVERSAL_TIERS = ["Task", "Interactional segment", "Micro task", "Sequence", "Transaction"]
 
     # Funzione per trovare mosse dialogiche
     def find_moves(tier_name, begin, end, participant, tiers):
@@ -100,6 +100,8 @@ def parse_eaf_to_csv(eaf_file, csv_file):
     prev_end = 0
     for ann in all_parlante_anns:
         if ann["begin"] > prev_end:
+            pause_duration_sec = (ann["begin"] - prev_end) / 1000
+
             # creiamo una pausa
             pause_row = {
                 "_begin_ms": prev_end,
@@ -112,12 +114,11 @@ def parse_eaf_to_csv(eaf_file, csv_file):
                 "Sequence": find_transversal_values("Sequence", prev_end, ann["begin"], tiers),
                 "Transaction": find_transversal_values("Transaction", prev_end, ann["begin"], tiers),
                 "Participant": "",
-                "Annotation": "",
+                "Annotation": f"({pause_duration_sec:.2f})",
                 "Non Verbal Action": "",
                 "Move Level 1": "",
                 "Move Level 2": "",
-                "Move Level 3": "",
-                "Note": find_transversal_values("Note", prev_end, ann["begin"], tiers),
+                "Move Level 3": ""
             }
             pause_rows.append(pause_row)
         prev_end = max(prev_end, ann["end"])
@@ -145,10 +146,30 @@ def parse_eaf_to_csv(eaf_file, csv_file):
                     "Non Verbal Action": find_moves("Non verbal action", ann["begin"], ann["end"], participant, tiers),
                     "Move Level 1": find_moves("MoveLev1", ann["begin"], ann["end"], participant, tiers),
                     "Move Level 2": find_moves("MoveLev2", ann["begin"], ann["end"], participant, tiers),
-                    "Move Level 3": find_moves("MoveLev3", ann["begin"], ann["end"], participant, tiers),
-                    "Note": find_transversal_values("Note", ann["begin"], ann["end"], tiers),
+                    "Move Level 3": find_moves("MoveLev3", ann["begin"], ann["end"], participant, tiers)
                 }
                 rows.append(row)
+
+    for tier in tiers:
+        if tier["tier_id"] == "Note":
+            for ann in tier["annotations"]:
+                rows.append({
+                    "_begin_ms": ann["begin"],
+                    "_end_ms": ann["end"],
+                    "Begin": millis_to_timestamp(ann["begin"]),
+                    "End": millis_to_timestamp(ann["end"]),
+                    "Task": find_transversal_values("Task", ann["begin"], ann["end"], tiers),
+                    "Interactional Segment": find_transversal_values("Interactional segment", ann["begin"], ann["end"], tiers),
+                    "Micro Task": find_transversal_values("Micro task", ann["begin"], ann["end"], tiers),
+                    "Sequence": find_transversal_values("Sequence", ann["begin"], ann["end"], tiers),
+                    "Transaction": find_transversal_values("Transaction", ann["begin"], ann["end"], tiers),
+                    "Participant": "Note",
+                    "Annotation": ann["value"],
+                    "Non Verbal Action": "",
+                    "Move Level 1": "",
+                    "Move Level 2": "",
+                    "Move Level 3": ""
+                })
 
     rows.sort(key=lambda x: x["_begin_ms"])
 
