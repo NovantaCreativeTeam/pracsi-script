@@ -28,22 +28,24 @@ def parse_eaf_to_csv(eaf_file, csv_file):
     # Tier trasversali
     TRANSVERSAL_TIERS = ["Task", "Interactional segment", "Micro task", "Sequence", "Transaction"]
 
-    # Funzione per trovare mosse dialogiche
+    # Funzione per trovare mosse dialogiche ordinate per tempo
     def find_moves(tier_name, begin, end, participant, tiers):
         vals = []
         for tier in tiers:
             if tier["linguistic_type"] == tier_name and tier["participant"] == participant:
                 for ann in tier["annotations"]:
-                    if (ann["begin"] == begin or ann["end"] == end or (ann["begin"] >= begin and ann["end"] <= end) or (ann["begin"] <= begin and ann["end"] >= end)):
-                        vals.append(ann["value"])
-        return ", ".join(vals)
+                    if not (ann["end"] <= begin or ann["begin"] >= end):
+                        vals.append(ann)
+        # Ordina per begin, poi per end
+        vals.sort(key=lambda x: (x["begin"], x["end"]))
+        return ", ".join([v["value"] for v in vals])
 
     # Funzione per valori tier trasversali
     def find_transversal_values(tier_name, begin, end, tiers):
         for tier in tiers:
             if tier["tier_id"] == tier_name:
                 for idx, ann in enumerate(tier["annotations"], start=1):
-                    if not (ann["end"] < begin or ann["begin"] > end):
+                    if not (ann["end"] <= begin or ann["begin"] >= end):
                         # Se c'è un valore, restituiscilo; altrimenti restituisci l'indice
                         return ann["value"] if ann["value"].strip() else str(idx)
         return ""
@@ -102,25 +104,27 @@ def parse_eaf_to_csv(eaf_file, csv_file):
         if ann["begin"] > prev_end:
             pause_duration_sec = (ann["begin"] - prev_end) / 1000
 
-            # creiamo una pausa
-            pause_row = {
-                "_begin_ms": prev_end,
-                "_end_ms": ann["begin"],
-                "Begin": millis_to_timestamp(prev_end),
-                "End": millis_to_timestamp(ann["begin"]),
-                "Task": find_transversal_values("Task", prev_end, ann["begin"], tiers),
-                "Interactional Segment": find_transversal_values("Interactional segment", prev_end, ann["begin"], tiers),
-                "Sequence": find_transversal_values("Sequence", prev_end, ann["begin"], tiers),
-                "Participant": "",
-                "Annotation": f"({pause_duration_sec:.2f})",
-                "Non Verbal Action": "",
-                "Micro Task": find_transversal_values("Micro task", prev_end, ann["begin"], tiers),
-                "Transaction": find_transversal_values("Transaction", prev_end, ann["begin"], tiers),
-                "Move Level 1": "",
-                "Move Level 2": "",
-                "Move Level 3": ""
-            }
-            pause_rows.append(pause_row)
+            if pause_duration_sec >= 0.2:
+                # creiamo una pausa
+                pause_row = {
+                    "_begin_ms": prev_end,
+                    "_end_ms": ann["begin"],
+                    "Begin": millis_to_timestamp(prev_end),
+                    "End": millis_to_timestamp(ann["begin"]),
+                    "Task": find_transversal_values("Task", prev_end, ann["begin"], tiers),
+                    "Interactional Segment": find_transversal_values("Interactional segment", prev_end, ann["begin"], tiers),
+                    "Sequence": find_transversal_values("Sequence", prev_end, ann["begin"], tiers),
+                    "Participant": "",
+                    "Annotation": f"({pause_duration_sec:.2f})",
+                    "Non Verbal Action": "",
+                    "Micro Task": find_transversal_values("Micro task", prev_end, ann["begin"], tiers),
+                    "Transaction": find_transversal_values("Transaction", prev_end, ann["begin"], tiers),
+                    "Move Level 1": "",
+                    "Move Level 2": "",
+                    "Move Level 3": "",
+                    "is_pause": True
+                }
+                pause_rows.append(pause_row)
         prev_end = max(prev_end, ann["end"])
 
     # Aggiungi le annotazioni normali dei Parlante
@@ -146,7 +150,8 @@ def parse_eaf_to_csv(eaf_file, csv_file):
                     "Transaction": find_transversal_values("Transaction", ann["begin"], ann["end"], tiers),
                     "Move Level 1": find_moves("MoveLev1", ann["begin"], ann["end"], participant, tiers),
                     "Move Level 2": find_moves("MoveLev2", ann["begin"], ann["end"], participant, tiers),
-                    "Move Level 3": find_moves("MoveLev3", ann["begin"], ann["end"], participant, tiers)
+                    "Move Level 3": find_moves("MoveLev3", ann["begin"], ann["end"], participant, tiers),
+                    "is_pause": False
                 }
                 rows.append(row)
 
@@ -168,15 +173,35 @@ def parse_eaf_to_csv(eaf_file, csv_file):
                     "Transaction": find_transversal_values("Transaction", ann["begin"], ann["end"], tiers),
                     "Move Level 1": "",
                     "Move Level 2": "",
-                    "Move Level 3": ""
+                    "Move Level 3": "",
+                    "is_pause": False
                 })
 
-    rows.sort(key=lambda x: x["_begin_ms"])
+    # Ordina per begin, poi per end
+    rows.sort(key=lambda x: (x["_begin_ms"], x["_end_ms"]))
+
+    # Aggiungi numerazione Turni
+    turn_counter = 1
+    for row in rows:
+        if row["Participant"] != "Note" and not row["is_pause"]:
+            row["Turn"] = turn_counter
+            turn_counter += 1
+        else:
+            row["Turn"] = ""
 
     # Crea DataFrame e ordina colonne
     df = pd.DataFrame(rows)
-    df.insert(df.columns.get_loc("Participant"), "Row", df.index + 1)
-    df = df.drop(columns=["_begin_ms", "_end_ms"])  # cancella colonne tecniche
+    
+    # Riordina colonne per includere Turn e rimuovere colonne tecniche
+    cols = ["Begin", "End", "Turn", "Participant", "Annotation", "Non Verbal Action", "Task", 
+            "Interactional Segment", "Sequence", "Micro Task", "Transaction", 
+            "Move Level 1", "Move Level 2", "Move Level 3"]
+    
+    # Filtra solo le colonne esistenti (in caso di discrepanze)
+    df = df[cols]
+    
+    # Aggiungi colonna Row all'inizio
+    df.insert(0, "Row", range(1, len(df) + 1))
 
     df.to_csv(csv_file, index=True)
 
